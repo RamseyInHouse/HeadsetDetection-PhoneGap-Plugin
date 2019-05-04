@@ -6,6 +6,8 @@ import org.apache.cordova.PluginResult;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaWebView;
 
+import android.media.AudioDeviceInfo;
+import android.hardware.usb.UsbManager;
 import android.bluetooth.BluetoothHeadset;
 import android.content.Context;
 import android.media.AudioManager;
@@ -42,6 +44,8 @@ public class HeadsetDetection extends CordovaPlugin {
       IntentFilter intentFilter = new IntentFilter();
       intentFilter.addAction(Intent.ACTION_HEADSET_PLUG);
       intentFilter.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
+      intentFilter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+      intentFilter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
       this.receiver = new BroadcastReceiver() {
           @Override
           public void onReceive(Context context, Intent intent) {
@@ -81,7 +85,22 @@ public class HeadsetDetection extends CordovaPlugin {
     final AudioManager audioManager = (AudioManager) cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
     return audioManager.isWiredHeadsetOn() ||
         audioManager.isBluetoothA2dpOn() ||
-        audioManager.isBluetoothScoOn();
+        audioManager.isBluetoothScoOn() ||
+        isUSBHeadsetConnected();
+  }
+
+  private boolean isUSBHeadsetConnected() {
+    final AudioManager audioManager = (AudioManager) cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
+    final AudioDeviceInfo[] devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+
+    for (int i=0; i<devices.length;i++) {
+      AudioDeviceInfo device = devices[i];
+      if (device.getType() == AudioDeviceInfo.TYPE_USB_DEVICE || device.getType() == AudioDeviceInfo.TYPE_USB_HEADSET) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   public void onDestroy() {
@@ -95,6 +114,13 @@ public class HeadsetDetection extends CordovaPlugin {
   private int getConnectionStatus(String action, Intent intent) {
       int state = DEFAULT_STATE;
       int normalizedState = DEFAULT_STATE;
+
+      if (action.equals(UsbManager.ACTION_USB_DEVICE_ATTACHED)) {
+        return CONNECTED;
+      } else if (action.equals(UsbManager.ACTION_USB_DEVICE_DETACHED)) {
+        return DISCONNECTED;
+      }
+
       if (action.equals(Intent.ACTION_HEADSET_PLUG)) {
         state = intent.getIntExtra("state", DEFAULT_STATE);
       } else if (action.equals(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)) {
